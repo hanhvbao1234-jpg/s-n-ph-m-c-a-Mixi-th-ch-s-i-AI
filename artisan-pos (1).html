@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Artisan Coffee POS</title>
+<style>
+:root{color-scheme:light dark;--bg:#FEF8F3;--fg:#2C1810;--card:#fff;--bd:#EADBC8;--mut:#716053;--pri:#2C1810;--acc:#8B5E3C;--ok:#047857;--bad:#b91c1c;--warn:#b45309;--soft:#F5ECE3}
+@media(prefers-color-scheme:dark){:root{--bg:#1a0e08;--fg:#FEF8F3;--card:#27150C;--bd:#3E2317;--mut:#B79C86;--pri:#8B5E3C;--acc:#D8B490;--ok:#34d399;--bad:#f87171;--warn:#fbbf24;--soft:#381F14}}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg);font-size:13px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bd)}
+header h1{font-size:15px;margin:0}#sv{font-size:11px;font-weight:700;color:var(--ok)}
+nav{display:flex;gap:6px;overflow-x:auto;padding:8px 14px}main{padding:6px 14px 40px;max-width:1300px;margin:0 auto}
+.chip,.btn{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:10px;padding:6px 10px;font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap}
+.chip.on,.btn.p{background:var(--pri);color:#fff;border-color:var(--pri)}.btn.d{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn:disabled{opacity:.4;cursor:not-allowed}.btn.w{width:100%;padding:10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-bottom:10px}
+.g2{display:grid;grid-template-columns:1fr 330px;gap:12px;align-items:start}.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.g2e{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+.tg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tb{border-radius:14px;padding:10px;min-height:96px;cursor:pointer;display:flex;flex-direction:column;justify-content:space-between;border:2px solid var(--bd);background:var(--card)}
+.tb.o{background:var(--pri);color:#fff;border-color:var(--acc)}.tb.r{background:#FFF4E5;color:#854D0E;border-color:#FDE68A}.tb.sel{outline:3px solid #f59e0b}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 0}.mut{color:var(--mut);font-size:11px}.big{font-size:20px;font-weight:800}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px;border-bottom:1px solid var(--bd)}
+.q{display:inline-flex;gap:6px;align-items:center}.q button{width:24px;height:24px;border-radius:6px;border:0;background:var(--soft);color:var(--fg);font-weight:800;cursor:pointer}
+input,select{background:var(--bg);color:var(--fg);border:1px solid var(--bd);border-radius:8px;padding:6px 8px;font-size:12px}
+#modalBg{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;padding:14px;z-index:30}#modalBg.on{display:flex}#modal{background:var(--card);border-radius:16px;padding:16px;max-width:380px;width:100%;max-height:90vh;overflow:auto}
+#toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:40;display:flex;flex-direction:column;gap:6px}#toast div{background:var(--pri);color:#fff;padding:8px 14px;border-radius:12px;font-weight:700;font-size:12px}#toast .e{background:var(--bad)}
+.bars{display:flex;align-items:flex-end;gap:8px;height:100px}.bars div{flex:1;background:var(--acc);border-radius:4px 4px 0 0}
+@media(max-width:860px){.g2,.g2e,.g3{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>☕ Artisan Coffee POS</h1><span class="mut">Chi nhánh 1 – Sài Gòn • Thu ngân: Lan Anh</span>
+<span style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span id="sv"></span>
+<button class="btn" onclick="Core.exp()">Xuất JSON</button><button class="btn" onclick="Core.imp()">Nhập JSON</button><button class="btn d" onclick="Core.reset()">Reset</button></span></header>
+<nav id="nav"></nav><main id="view"></main><div id="toast"></div><div id="modalBg" onclick="if(event.target===this)closeM()"><div id="modal"></div></div>
+<script>
+/* ============ CORE: dữ liệu + nghiệp vụ + lưu trữ (không đụng DOM) ============ */
+const KEY='artisan_pos_v3';
+const INV={robusta:['Robusta Honey Cầu Đất','kg',180000,13,5],arabica:['Arabica Cầu Đất','kg',220000,5,5],sweetMilk:['Sữa đặc Phương Nam','hộp',26250,4,5],freshMilk:['Sữa tươi Dalat Milk','Lít',32000,5,12],cups:['Ly Kraft + nắp + ống hút','bộ',1200,100,100],croissant:['Croissant (bán thành phẩm)','cái',15000,5,10]};
+const SZ={S:[.8,-5000],M:[1,0],L:[1.35,10000]};
+const PROD=[
+['p1','Cà phê Phin Sữa Đá',35000,'coffee','☕',{robusta:.025,sweetMilk:.08,cups:1}],
+['p2','Espresso Tonic Yuzu',55000,'specialty','🍹',{arabica:.02,cups:1}],
+['p3','Trà Sen Macchiato',45000,'tea','🍵',{freshMilk:.05,cups:1}],
+['p4','Croissant Bơ Pháp',38000,'pastry','🥐',{croissant:1}],
+['p5','Pour-Over V60 Cầu Đất',65000,'specialty','🧪',{arabica:.02,cups:1}],
+['p6','Cold Brew Cam Sả',48000,'tea','🧊',{arabica:.025,cups:1}]];
+const P=id=>PROD.find(p=>p[0]===id);
+const DEN=[500000,200000,100000,50000,20000];
+const min=n=>Date.now()-n*60000;
+const it=(pid,size,qty,sugar='70% ngọt',ice='Đá chuẩn')=>({pid,size,sugar,ice,foam:false,qty});
+function seed(){return{scr:1,active:'B.01',seq:8924,
+inv:{robusta:12.4,arabica:8.6,sweetMilk:8.5,freshMilk:4,cups:350,croissant:14},
+tables:[
+{id:'B.01',area:'Tầng 1',seats:4,st:'o',at:min(42),items:[it('p1','M',1),it('p5','M',1),it('p4','M',1)]},
+{id:'B.02',area:'Tầng 1',seats:4,st:'e',items:[]},
+{id:'B.03',area:'Tầng 1',seats:6,st:'o',at:min(15),items:[it('p2','L',2,'70% ngọt','Ít đá'),it('p3','M',2)]},
+{id:'B.04',area:'Tầng 1',seats:4,st:'r',note:'Anh Tuấn • 18:30',items:[]},
+{id:'B.05',area:'Tầng 1',seats:2,st:'o',at:min(65),items:[it('p1','M',1)]},
+{id:'B.06',area:'Tầng 1',seats:2,st:'e',items:[]},
+{id:'SV.01',area:'Sân Vườn',seats:4,st:'o',at:min(28),items:[it('p6','M',2)]},
+{id:'SV.02',area:'Sân Vườn',seats:6,st:'e',items:[]}],
+orders:[],stockLog:[],handovers:[],
+base:{rev:14850000,n:142,cash:3840000},cash:{open:2000000,expense:220000},
+count:greedy(5620000),
+draft:{sup:'Cầu Đất Farm',lines:{}},
+po:[{id:'PNK-042',sup:'Cầu Đất Farm',desc:'50kg Robusta Honey',total:12554200,paid:true},{id:'PNK-040',sup:'Dalat Milk',desc:'48L sữa tươi',total:1536000,paid:false}],
+staff:[{n:'Lan Anh',r:'Barista chính',at:min(250)},{n:'Minh Trí',r:'Thu ngân',at:min(245)},{n:'Hoàng Nam',r:'Quản lý ca',at:min(270)}]}}
+function greedy(t){const c={};DEN.forEach(d=>{c[d]=Math.floor(t/d);t%=d});return c}
+let S,saved=null,okSave=true,T0;
+const Store={
+ read(){try{return JSON.parse(localStorage.getItem(KEY))}catch(e){return null}},
+ write(o){try{localStorage.setItem(KEY,JSON.stringify(o));return true}catch(e){return false}}};
+function save(){clearTimeout(T0);T0=setTimeout(()=>{okSave=Store.write(S);saved=new Date();ind()},200)}
+const unit=i=>P(i.pid)[2]+SZ[i.size][1]+(i.foam?12000:0);
+function bill(items){let sub=0,n=0;items.forEach(i=>{sub+=unit(i)*i.qty;n+=i.qty});const d=Math.round(sub*.1),v=Math.round((sub-d)*.08);return{sub,n,d,v,tot:sub-d+v}}
+const tbl=id=>S.tables.find(t=>t.id===id),cur=()=>tbl(S.active);
+const rev=()=>S.base.rev+S.orders.reduce((a,o)=>a+o.tot,0);
+const nOrd=()=>S.base.n+S.orders.length;
+const cashIn=()=>S.base.cash+S.orders.filter(o=>o.m==='cash').reduce((a,o)=>a+o.tot,0);
+const theory=()=>S.cash.open+cashIn()-S.cash.expense;
+const actual=()=>DEN.reduce((a,d)=>a+d*(S.count[d]||0),0);
+const low=()=>Object.keys(INV).filter(k=>S.inv[k]<=INV[k][3]);
+function stock(it,sign){ // sign +1 trừ kho, -1 hoàn kho
+ const m=SZ[it.size][0];Object.entries(P(it.pid)[5]).forEach(([k,v])=>{const a=(k==='cups'||k==='croissant'?v:v*m)*it.qty;S.inv[k]=Math.max(0,S.inv[k]-sign*a);S.stockLog.push({t:Date.now(),k,q:-sign*a,ref:it.pid})});
+ if(it.foam){S.inv.freshMilk=Math.max(0,S.inv.freshMilk-sign*.04*it.qty)}}
+const A={
+ sel(id){S.active=id},
+ go(n){S.scr=n},
+ add(pid,size,sugar,ice,foam){const t=cur(),x={pid,size,sugar,ice,foam,qty:1},e=t.items.find(i=>i.pid===pid&&i.size===size&&i.sugar===sugar&&i.ice===ice&&i.foam===foam);
+  if(e)e.qty++;else t.items.push(x);stock({...x,qty:1},1);if(t.st!=='o'){t.st='o';t.at=Date.now()}},
+ qty(i,d){const t=cur(),x=t.items[i];if(!x)return;if(d<0)stock({...x,qty:1},-1);else stock({...x,qty:1},1);x.qty+=d;if(x.qty<=0)t.items.splice(i,1);if(!t.items.length){t.st='e';t.at=null}},
+ clear(){const t=cur();t.items.forEach(x=>stock(x,-1));t.items=[];t.st='e';t.at=null},
+ open(id){const t=tbl(id);t.st='o';t.at=Date.now()},
+ move(to){const a=cur(),b=tbl(to);b.items=a.items;b.st='o';b.at=a.at;a.items=[];a.st='e';a.at=null;S.active=to},
+ merge(to){const a=cur(),b=tbl(to);a.items.forEach(x=>{const e=b.items.find(y=>y.pid===x.pid&&y.size===x.size&&y.sugar===x.sugar&&y.ice===x.ice&&y.foam===x.foam);e?e.qty+=x.qty:b.items.push(x)});a.items=[];a.st='e';a.at=null;S.active=to},
+ pay(m){const t=cur(),b=bill(t.items);if(!t.items.length)return null;const code='HD-'+(++S.seq);
+  S.orders.push({code,t:Date.now(),table:t.id,items:JSON.parse(JSON.stringify(t.items)),tot:b.tot,m});t.items=[];t.st='e';t.at=null;return{code,tot:b.tot}},
+ den(d,x){S.count[d]=Math.max(0,(S.count[d]||0)+x)},
+ autoCount(){S.count=greedy(theory())},
+ handover(){const a=actual(),th=theory();S.handovers.push({t:Date.now(),theory:th,actual:a,diff:a-th})},
+ staff(i){const s=S.staff[i];s.at=s.at?null:Date.now()},
+ line(k,x){const l=S.draft.lines;l[k]=Math.max(0,(l[k]||0)+x*INV[k][4])},
+ urgent(){S.draft.lines={};low().forEach(k=>S.draft.lines[k]=INV[k][4]*3)},
+ poSubmit(){const L=Object.entries(S.draft.lines).filter(e=>e[1]>0);if(!L.length)return null;let tot=0;
+  L.forEach(([k,q])=>{S.inv[k]+=q;tot+=q*INV[k][2];S.stockLog.push({t:Date.now(),k,q,ref:'PO'})});
+  const id='PNK-'+String(43+S.po.length-2).padStart(3,'0');
+  S.po.unshift({id,sup:S.draft.sup,desc:L.map(([k,q])=>q+INV[k][1]+' '+INV[k][0]).join(', '),total:tot,paid:false});S.draft.lines={};return id},
+ poPay(i){S.po[i].paid=!S.po[i].paid}};
+function dispatch(fn,...a){const r=A[fn](...a);save();render();return r}
+const Core={
+ exp(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='artisan-pos-'+new Date().toISOString().slice(0,10)+'.json';a.click()},
+ imp(){const i=document.createElement('input');i.type='file';i.accept='application/json';i.onchange=()=>{const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!o.tables||!o.inv)throw 0;S=o;save();render();toast('Đã nhập dữ liệu')}catch(e){toast('File không hợp lệ','e')}};r.readAsText(i.files[0])};i.click()},
+ reset(){if(confirm('Xóa toàn bộ dữ liệu đã lưu?')){try{localStorage.removeItem(KEY)}catch(e){}S=seed();render();toast('Đã reset')}}};
+S=Store.read()||seed();
+if(!S.count||!S.draft)S=seed();
+window.addEventListener('storage',e=>{if(e.key===KEY){S=Store.read()||S;render()}});
+window.addEventListener('beforeunload',()=>Store.write(S));
+
+/* ============ UI: chỉ đọc S và gọi dispatch ============ */
+const $=id=>document.getElementById(id),f=n=>Math.round(n).toLocaleString('vi-VN')+' đ';
+const NAV=['Bàn','Gọi món','Thanh toán','Báo cáo & Kho','Ca trực','Két','BOM','Nhập kho','Công nợ NCC'];
+let area='all',cat='all',q='',pm='cash',given=0;
+function toast(m,t){const d=document.createElement('div');d.textContent=m;if(t)d.className='e';$('toast').appendChild(d);setTimeout(()=>d.remove(),2800)}
+function ind(){const e=$('sv');e.textContent=okSave?'💾 Đã lưu '+(saved?saved.toLocaleTimeString('vi-VN'):'tự động'):'⚠ Không lưu được (trình duyệt chặn)';e.style.color=okSave?'var(--ok)':'var(--bad)'}
+function modal(h){$('modal').innerHTML=h;$('modalBg').classList.add('on')}function closeM(){$('modalBg').classList.remove('on')}
+const go=n=>dispatch('go',n);
+const mins=t=>t?Math.max(1,Math.floor((Date.now()-t)/60000))+"'":'';
+const line=x=>`<div class="row" style="align-items:flex-start"><div><b>${x.qty}× ${P(x.pid)[1]}</b><div class="mut">Size ${x.size} • ${x.sugar} • ${x.ice}${x.foam?' • +Foam':''}</div></div><b>${f(unit(x)*x.qty)}</b></div>`;
+const totals=b=>`<div class="row mut"><span>Tạm tính (${b.n} món)</span><span>${f(b.sub)}</span></div><div class="row ok"><span>VIP Gold −10%</span><span>-${f(b.d)}</span></div><div class="row mut"><span>VAT 8%</span><span>+${f(b.v)}</span></div><div class="row" style="border-top:1px solid var(--bd)"><b>CẦN THU</b><span class="big" style="color:var(--acc)">${f(b.tot)}</span></div>`;
+
+function v1(){const t=cur(),b=bill(t.items);const oc=S.tables.filter(x=>x.st==='o').length;
+ const list=S.tables.filter(x=>area==='all'||x.area===area).map(x=>{const bb=bill(x.items),s=x.id===S.active?' sel':'';
+  if(x.st==='o')return`<div class="tb o${s}" onclick="dispatch('sel','${x.id}')"><div class="row"><b>${x.id}</b><span>⏱ ${mins(x.at)}</span></div><div><div class="mut" style="color:#D8B490">${x.area} • ${x.seats} chỗ • ${bb.n} món</div><b>${f(bb.tot)}</b></div></div>`;
+  if(x.st==='r')return`<div class="tb r${s}" onclick="dispatch('sel','${x.id}')"><div><b>${x.id}</b><div class="mut" style="color:inherit">${x.note}</div></div><button class="btn p" onclick="event.stopPropagation();dispatch('open','${x.id}')">Mở khách vào</button></div>`;
+  return`<div class="tb${s}" style="border-style:dashed" onclick="dispatch('sel','${x.id}')"><div class="row"><b>${x.id}</b><span class="ok mut">Trống</span></div><div style="text-align:center;color:var(--acc);font-weight:700">+ Mở bàn</div><div class="mut">${x.area} • ${x.seats} chỗ</div></div>`}).join('');
+ return`<div class="g2"><div><div class="card row"><div><div class="mut">Tình trạng thời gian thực</div><div class="big">${oc}/${S.tables.length} bàn đang dùng</div></div><div style="display:flex;gap:6px">${['all','Tầng 1','Sân Vườn'].map(a=>`<button class="chip ${area===a?'on':''}" onclick="area='${a}';render()">${a==='all'?'Tất cả':a}</button>`).join('')}</div></div><div class="tg">${list}</div></div>
+ <div class="card"><div class="row"><b>Bàn ${t.id} • ${t.area}</b><span class="mut">${t.st==='o'?'⏱ '+mins(t.at):t.st==='e'?'Trống':'Đặt trước'}</span></div>
+ <div style="max-height:220px;overflow:auto">${t.items.map(line).join('')||'<div class="mut" style="padding:20px;text-align:center">Chưa gọi món</div>'}</div>${totals(b)}
+ <div style="display:grid;gap:6px;margin-top:8px"><button class="btn w" onclick="go(2)">+ Thêm món</button><div class="g3" style="grid-template-columns:1fr 1fr"><button class="btn" onclick="mv('move')">Chuyển bàn</button><button class="btn" onclick="mv('merge')">Gộp bàn</button></div><button class="btn p w" ${t.items.length?'':'disabled'} onclick="go(3)">Thanh toán</button></div></div></div>`}
+function mv(k){const t=cur();if(!t.items.length)return toast('Bàn đang trống','e');
+ const opts=S.tables.filter(x=>x.id!==t.id&&(k==='move'?x.st==='e':x.st==='o'));if(!opts.length)return toast(k==='move'?'Không còn bàn trống':'Không có bàn đang dùng để gộp','e');
+ modal(`<h3>${k==='move'?'Chuyển':'Gộp'} bàn ${t.id} sang</h3><select id="mvT" style="width:100%">${opts.map(x=>`<option value="${x.id}">${x.id} (${x.area})</option>`).join('')}</select><div class="row" style="margin-top:12px"><button class="btn" onclick="closeM()">Hủy</button><button class="btn p" onclick="dispatch('${k}',$('mvT').value);closeM();toast('Đã ${k==='move'?'chuyển':'gộp'} bàn')">Xác nhận</button></div>`)}
+
+function grid(){return PROD.filter(p=>(cat==='all'||p[3]===cat)&&p[1].toLowerCase().includes(q.toLowerCase())).map(p=>`<div class="card" style="cursor:pointer;margin:0" onclick="custom('${p[0]}')"><div style="font-size:30px;text-align:center;background:var(--soft);border-radius:10px;padding:8px">${p[4]}</div><b>${p[1]}</b><div class="row"><b>${f(p[2])}</b><span class="btn p" style="padding:2px 8px">+</span></div></div>`).join('')||'<div class="mut">Không tìm thấy món</div>'}
+function v2(){const t=cur(),b=bill(t.items);
+ return`<div class="g2"><div><div class="row"><input id="q" placeholder="Tìm món..." value="${q}" oninput="q=this.value;$('pg').innerHTML=grid()" style="flex:1"><select onchange="dispatch('sel',this.value)">${S.tables.map(x=>`<option value="${x.id}" ${x.id===S.active?'selected':''}>Bàn ${x.id} (${x.items.length} dòng)</option>`).join('')}</select></div>
+ <div style="display:flex;gap:6px;overflow-x:auto;margin:8px 0">${[['all','Tất cả'],['coffee','☕ Cà phê'],['specialty','🧪 Specialty'],['tea','🍃 Trà & Cold Brew'],['pastry','🥐 Bánh']].map(c=>`<button class="chip ${cat===c[0]?'on':''}" onclick="cat='${c[0]}';render()">${c[1]}</button>`).join('')}</div><div id="pg" class="tg">${grid()}</div></div>
+ <div class="card"><div class="row"><b>Đơn hiện tại • ${t.id}</b><button class="btn" onclick="if(confirm('Xóa hết món?')){dispatch('clear')}">Xóa hết</button></div>
+ ${t.items.map((x,i)=>`<div class="row"><div><b>${P(x.pid)[1]}</b><div class="mut">Size ${x.size} • ${x.sugar} • ${x.ice}${x.foam?' • +Foam':''}</div><b style="color:var(--acc)">${f(unit(x))}</b></div><span class="q"><button onclick="dispatch('qty',${i},-1)">−</button><b>${x.qty}</b><button onclick="dispatch('qty',${i},1)">+</button></span></div>`).join('')||'<div class="mut" style="padding:20px;text-align:center">Chưa có món</div>'}${totals(b)}<button class="btn p w" style="margin-top:8px" ${t.items.length?'':'disabled'} onclick="go(3)">Thanh toán • ${f(b.tot)}</button></div></div>`}
+function custom(id){const p=P(id);modal(`<h3>${p[4]} ${p[1]}</h3><div class="row"><span>Kích cỡ</span><select id="cS"><option value="S">S (−5k)</option><option value="M" selected>M</option><option value="L">L (+10k)</option></select></div><div class="row"><span>Độ ngọt</span><select id="cG"><option>70% ngọt</option><option>100% ngọt</option><option>30% ngọt</option><option>Không đường</option></select></div><div class="row"><span>Đá</span><select id="cI"><option>Đá chuẩn</option><option>Ít đá</option><option>Đá riêng</option><option>Nóng</option></select></div><label class="row"><span>+ Foam Cheese (+12.000đ)</span><input type="checkbox" id="cF"></label><div class="row"><button class="btn" onclick="closeM()">Hủy</button><button class="btn p" onclick="dispatch('add','${id}',$('cS').value,$('cG').value,$('cI').value,$('cF').checked);closeM();toast('Đã thêm vào bàn ${S.active}')">Thêm vào bàn ${S.active}</button></div>`)}
+
+function v3(){const t=cur(),b=bill(t.items);
+ return`<div class="g2e"><div class="card"><div class="row"><b>Hóa đơn #HD-${S.seq+1}</b><span style="color:var(--acc)"><b>Bàn ${t.id}</b></span></div>${t.items.map(line).join('')||'<div class="mut">Chưa có món. Chọn bàn đang dùng ở màn 1.</div>'}${totals(b)}</div>
+ <div class="card"><div class="row"><b>Phương thức</b></div><div style="display:flex;gap:6px;margin-bottom:10px">${[['cash','Tiền mặt'],['vietqr','VietQR'],['pos','Thẻ POS']].map(m=>`<button class="chip ${pm===m[0]?'on':''}" onclick="pm='${m[0]}';render()">${m[1]}</button>`).join('')}</div>
+ ${pm==='cash'?`<div class="row"><span>Khách đưa</span><input id="gv" type="number" value="${given||''}" oninput="given=+this.value;chg()" style="text-align:right"></div><div style="display:flex;gap:6px;margin:6px 0"><button class="btn" onclick="given=${b.tot};render()">Vừa đủ</button>${[100000,200000,500000].map(v=>`<button class="btn" onclick="given=${v};render()">${v/1000}k</button>`).join('')}</div><div class="row"><b>Tiền thối</b><b id="chg" class="ok"></b></div>`:pm==='vietqr'?`<div class="card" style="background:var(--soft)"><b>Vietcombank CN Saigon • 0071000982341</b><div class="mut">Nội dung CK:</div><b style="font-family:monospace">ARTISAN ${t.id.replace('.','')} HD${S.seq+1}</b><div class="mut" style="margin-top:6px">Số tiền: <b>${f(b.tot)}</b>. Xác nhận sau khi ngân hàng báo có.</div></div>`:`<div class="card" style="background:var(--soft)">Quẹt thẻ trên SmartPOS (Visa/Master/JCB/Napas) rồi xác nhận.</div>`}
+ <button class="btn p w" ${t.items.length?'':'disabled'} onclick="doPay()">Xác nhận đã thu tiền & Xuất E-Bill</button></div></div>`}
+function chg(){const e=$('chg');if(e)e.textContent=f(Math.max(0,given-bill(cur().items).tot))}
+function doPay(){const b=bill(cur().items);if(pm==='cash'&&given<b.tot)return toast('Khách đưa chưa đủ tiền','e');const r=dispatch('pay',pm);given=0;if(r){toast('🎉 '+r.code+' • '+f(r.tot));S.scr=1;render();save()}}
+
+function v4(){const L=low();const rc=S.orders.slice(-5).reverse();
+ return`<div class="g3"><div class="card" style="background:var(--pri);color:#fff"><div class="mut" style="color:#D8B490">DOANH THU</div><div class="big">${f(rev())}</div></div><div class="card"><div class="mut">ĐƠN HOÀN TẤT</div><div class="big">${nOrd()}</div></div><div class="card"><div class="mut">GIÁ TRỊ TB (AOV)</div><div class="big">${f(rev()/nOrd())}</div></div></div>
+ <div class="g2e"><div class="card"><b>Tồn kho</b><table>${Object.keys(INV).map(k=>`<tr><td>${INV[k][0]}</td><td class="${S.inv[k]<=INV[k][3]?'bad':'ok'}"><b>${S.inv[k].toFixed(k==='cups'||k==='croissant'?0:2)} ${INV[k][1]}</b></td><td class="mut">ngưỡng ${INV[k][3]}</td></tr>`).join('')}</table></div>
+ <div><div class="card" style="border-color:var(--bad)"><b class="bad">⚠ Cảnh báo tồn kho (${L.length})</b>${L.map(k=>`<div class="row"><span>${INV[k][0]}</span><b class="bad">${S.inv[k].toFixed(1)} ${INV[k][1]}</b></div>`).join('')||'<div class="ok">Kho ổn định</div>'}<button class="btn d w" style="margin-top:8px" onclick="A.urgent();go(8)">Lập phiếu nhập khẩn cấp →</button></div>
+ <div class="card"><b>Đơn gần đây</b>${rc.map(o=>`<div class="row"><span>${o.code} • ${o.table} • ${o.m}</span><b>${f(o.tot)}</b></div>`).join('')||'<div class="mut">Chưa có đơn mới trong phiên này</div>'}</div></div></div>`}
+
+function v5(){return`<div class="g2e"><div class="card" style="background:var(--pri);color:#fff"><b>Ca Chiều (14:00 – 22:30)</b><div style="color:#D8B490">Trưởng ca: Hoàng Nam</div></div><div class="card"><b>Nhân sự & chấm công</b>${S.staff.map((s,i)=>`<div class="row"><div><b>${s.n}</b><div class="mut">${s.r}</div></div><div style="text-align:right"><div class="${s.at?'ok':'mut'}">${s.at?'Có mặt • '+Math.floor((Date.now()-s.at)/3600000)+'h'+Math.floor((Date.now()-s.at)/60000)%60+'m':'Đã tan ca'}</div><button class="btn" onclick="dispatch('staff',${i})">${s.at?'Tan ca':'Vào ca'}</button></div></div>`).join('')}</div></div>`}
+
+function v6(){const th=theory(),ac=actual(),d=ac-th;
+ return`<div class="card" style="border-color:${d?'var(--warn)':'var(--ok)'}"><b class="${d?'warn':'ok'}">${d===0?'KHỚP KÉT 100%':d>0?'DƯ TIỀN KÉT':'THIẾU TIỀN KÉT'}</b><div class="mut">Chênh lệch: <b>${f(d)}</b></div></div>
+ <div class="g2e"><div class="card"><b>Dòng tiền POS</b><div class="row"><span>Quỹ đầu ca</span><b>${f(S.cash.open)}</b></div><div class="row ok"><span>(+) Thu tiền mặt</span><b>+${f(cashIn())}</b></div><div class="row bad"><span>(−) Chi mua đá</span><b>-${f(S.cash.expense)}</b></div><div class="row" style="border-top:1px solid var(--bd)"><b>Lý thuyết</b><b class="big" style="color:var(--acc)">${f(th)}</b></div></div>
+ <div class="card"><div class="row"><b>Đếm tiền thực tế</b><button class="btn" onclick="dispatch('autoCount')">Khớp tự động</button></div>${DEN.map(d=>`<div class="row"><span>${d.toLocaleString('vi-VN')} đ</span><span class="q"><button onclick="dispatch('den',${d},-1)">−</button><b>${S.count[d]||0}</b><button onclick="dispatch('den',${d},1)">+</button></span></div>`).join('')}<div class="row"><b>Tổng đếm</b><b class="big ok">${f(ac)}</b></div><button class="btn p w" onclick="dispatch('handover');toast('✅ Đã ghi biên bản bàn giao ca')">Xác nhận bàn giao ca</button>
+ ${S.handovers.length?`<div class="mut" style="margin-top:8px">Lần bàn giao gần nhất: ${new Date(S.handovers.at(-1).t).toLocaleTimeString('vi-VN')} • chênh ${f(S.handovers.at(-1).diff)}</div>`:''}</div></div>`}
+
+let bp='p1',bs='M';
+function v7(){const p=P(bp),m=SZ[bs][0];let cost=0;
+ const rows=Object.entries(p[5]).map(([k,v])=>{const a=(k==='cups'||k==='croissant')?v:v*m,c=a*INV[k][2];cost+=c;return`<tr><td><b>${INV[k][0]}</b></td><td>${k==='cups'||k==='croissant'?a:(a*(k==='robusta'||k==='arabica'?1000:k==='sweetMilk'?500:1000)).toFixed(0)} ${k==='cups'||k==='croissant'?INV[k][1]:k==='freshMilk'||k==='sweetMilk'?'ml':'g'}</td><td class="${S.inv[k]<=INV[k][3]?'bad':'ok'}"><b>${S.inv[k].toFixed(2)} ${INV[k][1]}</b></td><td style="text-align:right">${f(c)}</td></tr>`}).join('');const price=p[2]+SZ[bs][1];
+ return`<div class="card row"><div><b>${p[1]}</b><div class="mut">Trừ kho tự động khi gọi món, hoàn kho khi bớt món</div></div><div style="display:flex;gap:6px;align-items:center"><select onchange="bp=this.value;render()">${PROD.map(x=>`<option value="${x[0]}" ${x[0]===bp?'selected':''}>${x[1]}</option>`).join('')}</select>${['S','M','L'].map(s=>`<button class="chip ${bs===s?'on':''}" onclick="bs='${s}';render()">${s}</button>`).join('')}<div style="text-align:right"><div class="mut">Food cost</div><b class="ok">${f(cost)} (${(cost/price*100).toFixed(1)}%)</b></div></div></div>
+ <div class="card"><table><tr class="mut"><th>Nguyên liệu</th><th>Định lượng</th><th>Tồn kho</th><th style="text-align:right">Chi phí</th></tr>${rows}</table></div>`}
+
+function v8(){const L=S.draft.lines;let tot=0;
+ const rows=Object.keys(INV).map(k=>{const qn=L[k]||0,s=qn*INV[k][2];tot+=s;return`<tr><td><b>${INV[k][0]}</b><div class="mut">Tồn: ${S.inv[k].toFixed(1)}</div></td><td><span class="q"><button onclick="dispatch('line','${k}',-1)">−</button><b>${qn} ${INV[k][1]}</b><button onclick="dispatch('line','${k}',1)">+</button></span></td><td>${f(INV[k][2])}</td><td style="text-align:right"><b>${f(s)}</b></td></tr>`}).join('');
+ return`<div class="card"><div class="row"><b>Phiếu nhập PNK-${String(43+S.po.length-2).padStart(3,'0')}</b><select onchange="S.draft.sup=this.value;save()"><option ${S.draft.sup==='Cầu Đất Farm'?'selected':''}>Cầu Đất Farm</option><option ${S.draft.sup==='Dalat Milk'?'selected':''}>Dalat Milk</option></select></div>
+ <table><tr class="mut"><th>Nguyên liệu</th><th>Số lượng</th><th>Đơn giá</th><th style="text-align:right">Thành tiền</th></tr>${rows}</table><div class="row"><b>TỔNG THANH TOÁN</b><span class="big" style="color:var(--acc)">${f(tot)}</span></div>
+ <button class="btn p w" ${tot?'':'disabled'} onclick="const id=dispatch('poSubmit');toast('📦 Đã nhập kho '+id);go(9)">Hoàn tất & Nạp hàng vào kho thực tế</button></div>`}
+
+function v9(){const tot=S.po.reduce((a,p)=>a+p.total,0),paid=S.po.filter(p=>p.paid).reduce((a,p)=>a+p.total,0);
+ return`<div class="g3"><div class="card"><div class="mut">Tổng phiếu nhập</div><div class="big">${f(tot)}</div></div><div class="card"><div class="mut">Đã thanh toán</div><div class="big ok">${f(paid)}</div></div><div class="card"><div class="mut">Công nợ</div><div class="big warn">${f(tot-paid)}</div></div></div>
+ <div class="card"><div class="row"><b>Lịch sử phiếu nhập</b><button class="btn p" onclick="go(8)">+ Lập phiếu</button></div>${S.po.map((p,i)=>`<div class="row"><div><b>${p.id} • ${p.sup}</b><div class="mut">${p.desc}</div></div><div style="text-align:right"><b>${f(p.total)}</b><div><button class="btn" onclick="dispatch('poPay',${i})">${p.paid?'✓ Đã trả (bấm để hoàn)':'Đánh dấu đã trả'}</button></div></div></div>`).join('')}</div>`}
+
+function render(){
+ $('nav').innerHTML=NAV.map((n,i)=>`<button class="chip ${S.scr===i+1?'on':''}" onclick="go(${i+1})">${i+1}. ${n}</button>`).join('');
+ $('view').innerHTML=[v1,v2,v3,v4,v5,v6,v7,v8,v9][S.scr-1]();
+ if(S.scr===3)chg();ind();}
+render();
+setInterval(()=>{if(S.scr===1||S.scr===5)render()},60000);
+</script></body></html>
